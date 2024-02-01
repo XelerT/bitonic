@@ -5,7 +5,6 @@
 
 std::string read_file (const std::string &file_path)
 {
-        std::string output;
         std::ifstream file;
 
         file.exceptions(std::ifstream::failbit | std::ifstream::badbit);
