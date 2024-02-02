@@ -38,9 +38,8 @@ struct option_error : public std::runtime_error {
 int main () try
 {
         std::chrono::high_resolution_clock::time_point t_start, t_fin;
-        cl_ulong GPU_t_start, GPU_t_fin;
         
-        config_t config {256, 4, 4, "../include/opencl/bitonic_sort.cl"};
+        config_t config {16, 16*8, 4, "../include/opencl/bitonic_sort.cl"};
         bitonic_sort_t<int> app(config);
 
         cl::vector<int> data(config.data_sz);
@@ -68,7 +67,7 @@ int main () try
         if (data == sorted_data)
                 std::cout << "Passed.\n";
         else {
-                for (int i = 0; i < data.size(); i++)
+                for (size_t i = 0; i < data.size(); i++)
                         // if (data[i] != sorted_data[i])
                                 std::cout << i << " " << data[i] << " " << sorted_data[i] << "\n"; 
                 std::cout << "Not passed.\n";

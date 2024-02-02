@@ -7,11 +7,11 @@ namespace opencl
 {
         struct config_t
         {
-                size_t data_sz   = 1;   // number of 256-blocks
-                size_t global_sz = 1;   // number of 256-datagroups
+                size_t data_sz   = 1;
+                size_t global_sz = 1;
                 size_t local_sz  = 1;
 
-                size_t n_stages  = global_sz / local_sz;
+                int n_stages  = static_cast<int>(global_sz / local_sz);
                 
                 const char *kernel_file_name = "bitonic_sort.cl";
                 cl::QueueProperties q_props = cl::QueueProperties::Profiling | 
@@ -19,7 +19,7 @@ namespace opencl
 
                 config_t () = default;
                 config_t (size_t data_sz_,  size_t global_sz_,
-                          size_t local_sz_, size_t n_stages_, const char *kernel_file_name_):
+                          size_t local_sz_, int    n_stages_, const char *kernel_file_name_):
                           data_sz(data_sz_), global_sz(global_sz_), 
                           local_sz(local_sz_), n_stages(n_stages_),
                           kernel_file_name(kernel_file_name_) {}
@@ -46,7 +46,7 @@ namespace opencl
                         opencl_app_t (config_t &config_):
                                 platform(select_platform()),     context(get_gpu_context(platform())), 
                                 queue(context, config_.q_props), kernel(read_file(config_.kernel_file_name)), 
-                                config(config_) {}
+                                config(config_) { }
                                 // cl::string name    = P_.getInfo<CL_PLATFORM_NAME>();
                                 // cl::string profile = P_.getInfo<CL_PLATFORM_PROFILE>();       
 
@@ -65,11 +65,11 @@ namespace opencl
                 using opencl_app_t::config;
 
                 public:
-                        using sort_init_kernel       = cl::KernelFunctor<cl::Buffer>;
-                        using sort_stage_n_kernel    = cl::KernelFunctor<cl::Buffer, cl_int>;
-                        using sort_stage_0_kernel    = cl::KernelFunctor<cl::Buffer, cl_int>;
-                        using sort_merge_kernel      = cl::KernelFunctor<cl::Buffer, cl_int>;
-                        using sort_merge_last_kernel = cl::KernelFunctor<cl::Buffer>;
+                        using sort_init_kernel       = cl::KernelFunctor<cl::Buffer, cl::LocalSpaceArg>;
+                        using sort_stage_n_kernel    = cl::KernelFunctor<cl::Buffer, cl::LocalSpaceArg, cl_int, cl_int>;
+                        using sort_stage_0_kernel    = cl::KernelFunctor<cl::Buffer, cl::LocalSpaceArg, cl_int>;
+                        using sort_merge_kernel      = cl::KernelFunctor<cl::Buffer, cl_uint>;
+                        using sort_merge_last_kernel = cl::KernelFunctor<cl::Buffer, cl::LocalSpaceArg>;
 
                         bitonic_sort_t (config_t &config_): 
                                 opencl_app_t(config_) {}
@@ -122,30 +122,51 @@ namespace opencl
                 sort_merge_kernel      sort_merge      {program, "bitonic_sort_merge"};
                 sort_merge_last_kernel sort_merge_last {program, "bitonic_sort_merge_last"};
                 
+                auto ctx_devices = context.getInfo<CL_CONTEXT_DEVICES>();
+                config.local_sz = sort_init.getKernel().getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(ctx_devices[0]);
+
+                config.local_sz = (int) pow(2, trunc(log2(static_cast<double>(config.local_sz))));
+                if (config.local_sz >= config.global_sz)
+                        config.global_sz = config.local_sz;
+                std::cout << "conf lc_sz=" << config.local_sz << std::endl;
+                std::cout << "conf gl_sz=" << config.global_sz << std::endl;
+                
                 cl::NDRange gl_range {config.global_sz};
                 cl::NDRange lc_range {local_sz()};
                 cl::EnqueueArgs args {queue, gl_range, lc_range};
-                
-                cl::Event event1 = sort_init(args, cl_data);
+// cl::copy(queue, cl_data, sorted_data, sorted_data + n_elems);
+// for (int i = 0; i < 16; i++) { std::cout << sorted_data[i] << " "; }
+// std::cout << std::endl;
+
+                cl::Event event1 = sort_init(args, cl_data, cl::Local(config.local_sz * sizeof(int) * 8));
                 event1.wait();
-                cl_ulong GPU_t_start = event1.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-                cl_ulong GPU_t_fin   = event1.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+
+                cl_ulong GPU_t_start  = event1.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                cl_ulong GPU_t_fin    = event1.getProfilingInfo<CL_PROFILING_COMMAND_END>();
                 cl_ulong GPU_duration = GPU_t_fin - GPU_t_start;
 
-                // for (int k = 2; k < config.n_stages; k *= 2) {
-                //         for (int j = k; j > 0; j /= 2) {
-                //                 cl::Event event2 = sort_stage_n(args, cl_data, j);
-                //                 event2.wait();
-                //                 GPU_t_start = event2.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-                //                 GPU_t_fin   = event2.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-                //                 GPU_duration += GPU_t_fin - GPU_t_start;
-                //         }
-                //         cl::Event event2 = sort_stage_0(args, cl_data, k);
-                //         event2.wait();
-                //         GPU_t_start = event2.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-                //         GPU_t_fin   = event2.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-                //         GPU_duration += GPU_t_fin - GPU_t_start;
-                // }
+                for (int k = 2; k < config.n_stages; k *= 2) {
+                        cl::copy(queue, cl_data, sorted_data, sorted_data + n_elems);
+                                for (int i = 0; i < 16; i++) { std::cout << sorted_data[i] << "|"; }
+                                std::cout << std::endl;
+                                
+                        for (int j = k; j > 0; j /= 2) {
+                                cl::Event event2 = sort_stage_n(args, cl_data, cl::Local(data_size), k, j);
+                                event2.wait();
+                                GPU_t_start = event2.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                                GPU_t_fin   = event2.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+                                GPU_duration += GPU_t_fin - GPU_t_start;
+                                
+                                cl::copy(queue, cl_data, sorted_data, sorted_data + n_elems);
+                                for (int i = 0; i < 16; i++) { std::cout << sorted_data[i] << " "; }
+                                std::cout << std::endl;
+                        }
+                        // cl::Event event2 = sort_stage_0(args, cl_data, cl::Local(data_size), k);
+                        // event2.wait();
+                        // GPU_t_start = event2.getProfilingInfo<CL_PROFILING_COMMAND_START>();
+                        // GPU_t_fin   = event2.getProfilingInfo<CL_PROFILING_COMMAND_END>();
+                        // GPU_duration += GPU_t_fin - GPU_t_start;
+                }
 
                 // for (int j = config.n_stages; j > 0; j /= 2) {
                 //         cl::Event event2 = sort_merge(args, cl_data, j);
@@ -155,7 +176,7 @@ namespace opencl
                 //         GPU_duration += GPU_t_fin - GPU_t_start;
                 // }
 
-                // cl::Event event2 = sort_merge_last(args, cl_data);
+                // cl::Event event2 = sort_merge_last(args, cl_data, cl::Local(data_size));
                 // event2.wait();
                 // GPU_t_start = event2.getProfilingInfo<CL_PROFILING_COMMAND_START>();
                 // GPU_t_fin   = event2.getProfilingInfo<CL_PROFILING_COMMAND_END>();
