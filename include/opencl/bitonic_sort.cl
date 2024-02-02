@@ -26,229 +26,50 @@
                 data elements.
 */
 
-#define SORT_VECTOR(input, dir)                                 \
-        comp = abs(input > shuffle(input, mask2)) ^ dir;        \
-        input = shuffle(input, comp * 2 + add2);                \
-        comp = abs(input > shuffle(input, mask1)) ^ dir;        \
-        input = shuffle(input, comp + add1);
-
-#define SWAP_VECTORS(in1, in2, dir)                             \
-        input1 = in1;                                           \
-        input2 = in2;                                           \
-        comp = (abs(input1 > input2) ^ dir) * 4 + add3;         \
-        in1 = shuffle2(input1, input2, comp);                   \
-        in2 = shuffle2(input2, input1, comp);                   
-
-void last_merge_sort (__global int4 *g_data, __local int4 *l_data, int dir)
+void swap (__global int *rhs, __global int *lhs)
 {
-        int4 input1, input2, temp;
-
-        uint4 comp, swap, mask1, mask2, add1, add2, add3;
-        uint id, global_start, size, stride;
-
-        mask1 = (uint4) (1, 0, 3, 2);
-        mask2 = (uint4) (2, 3, 0, 1);
-        
-        add1  = (uint4) (1, 1, 3, 3);
-        add2  = (uint4) (2, 3, 2, 3);
-        add3  = (uint4) (4, 5, 6, 7);
-
-        id  = get_local_id(0);
-
-        global_start = get_group_id(0) * 
-                       get_local_size(0) * 2 + id;
-
-        input1 = g_data[global_start];
-        input2 = g_data[global_start + get_local_size(0)];
-
-        comp = (abs(input1 > input2) ^ dir) * 4 + add3;
-        l_data[id]                     = shuffle2(input1, input2, comp);;
-        l_data[id + get_local_size(0)] = shuffle2(input2, input1, comp);
-
-        for (stride = get_local_size(0) / 2; stride > 1; stride /= 2) {
-                barrier(CLK_LOCAL_MEM_FENCE);
-                id = get_local_id(0) + (get_local_id(0) / stride) * stride;
-                SWAP_VECTORS(l_data[id], l_data[id + stride], dir)
-        }
-        barrier(CLK_LOCAL_MEM_FENCE);
-
-        id = get_local_id(0) * 2;
-        input1 = l_data[id]; 
-        input2 = l_data[id + 1];
-        temp = input1;
-
-        comp = (abs(input1 > input2) ^ dir) * 4 + add3;
-        input1 = shuffle2(input1, input2, comp);
-        input2 = shuffle2(input2, temp, comp);
-        SORT_VECTOR(input1, dir);
-        SORT_VECTOR(input2, dir);
-
-        g_data[global_start + get_local_id(0)]     = input1;
-        g_data[global_start + get_local_id(0) + 1] = input2;
+        int temp = *rhs;
+        atomic_xchg(rhs, *lhs);
+        atomic_xchg(lhs, temp);
 }
 
-__kernel void bitonic_sort_init (__global int4 *g_data, __local int4 *l_data)
+// __kernel void bitonic_sort (__global int4 *g_data, __local int4 *l_data, uint k, uint j)
+// {
+//         int gid   = get_global_id(0);
+//         int gsize = get_global_size(0);
+        
+//         for (int i = gid; i < n_data; i += gsize) {
+//                 int ixj = i ^ j;
+//                 if ((ixj) > i) {
+//                         if (((i & k) == 0 && data[i] > data[ixj]) || 
+//                             ((i & k) != 0 && data[i] < data[ixj])) {
+//                                 swap(data + i, data + ixj);
+//                         }
+//                 }
+//         }
+// }
+
+__kernel void bitonic_sort_stage_n (__global int *g_data, uint k, uint j) 
 {
         int4 input1, input2, temp;
+        uint4 comp, add;
+        uint id, global_offset;
+        int idxj, dir, data1, data2;
 
-        uint4 swap, mask1, mask2, comp, add1, add2, add3;
-        uint id, global_start, size, stride;
-        int dir;
+        id = get_group_id(0) + (get_group_id(0) / j) * j * get_local_size(0) + 
+             get_local_id(0);
 
-        mask1 = (uint4) (1, 0, 3, 2);
-        mask2 = (uint4) (2, 3, 0, 1);
-        swap  = (uint4) (0, 0, 1, 1);
-        
-        add1  =  (uint4) (0, 0, 2, 2);
-        add2  =  (uint4) (0, 1, 0, 1);
-        add3  =  (uint4) (0, 1, 2, 3);
+        global_offset = j * get_local_size(0);
 
-        /* finding global address */
-        id = get_local_id(0) * 2;
-        global_start = get_group_id(0)   * 
-                       get_local_size(0) * 2 + id;
-        
-        input1 = g_data[global_start];
-        input2 = g_data[global_start + 1];
+        idxj = id ^ j;
 
-        /* sort first vector */
-        comp   = abs(input1 > shuffle(input1, mask1));
-        input1 = shuffle(input1, comp ^ swap + add1);
-        comp   = abs(input1 > shuffle(input1, mask2));
-        input1 = shuffle(input1, comp * 2 + add2);
-        comp   = abs(input1 > shuffle(input1, mask1));
-        input1 = shuffle(input1, comp + add1);
+        data1 = g_data[id];
+        data2 = g_data[idxj];
 
-        /* sort second vector */
-        comp   = abs(input2 < shuffle(input2, mask1));
-        input2 = shuffle(input2, comp ^ swap + add1);
-        comp   = abs(input2 < shuffle(input2, mask2));
-        input2 = shuffle(input2, comp * 2 + add2);
-        comp   = abs(input2 < shuffle(input2, mask1));
-        input2 = shuffle(input2, comp + add1);
-
-        /* swap elements */
-        add3 = (uint4) (4, 5, 6, 7);
-        dir = get_group_id(0) % 2;
-        
-        temp = input1;
-        comp = (abs(input1 < input2) ^ dir) * 4 + add3;
-        input1 = shuffle2(input1, input2, comp);
-        input2 = shuffle2(input2, temp, comp);
-
-        SORT_VECTOR(input1, dir);
-        SORT_VECTOR(input2, dir);
-
-        l_data[id]     = input1;
-        l_data[id + 1] = input2;
-
-        /* perform upper stage */
-        for (size = 2; size < get_local_size(0); size *= 2) {
-                dir = (get_local_id(0) / size & 1) * -1;
-
-                /* perform lower stages */
-                for (stride = size; stride > 1; stride /= 2) {
-                        barrier(CLK_LOCAL_MEM_FENCE);
-                        id = get_local_id(0) + (get_local_id(0) / stride) * stride;
-                        SWAP_VECTORS(l_data[id], l_data[id + stride], dir)
+        if (idxj > id) {
+                if (((id & k) == 0 && data1 > data2) || 
+                    ((id & k) != 0 && data1 < data2)) {
+                        swap(g_data + id, g_data + idxj);
                 }
-                barrier(CLK_LOCAL_MEM_FENCE);
-
-                id = get_local_id(0) * 2;
-                input1 = l_data[id]; 
-                input2 = l_data[id + 1];
-                temp = input1;
-
-                comp = (abs(input1 > input2) ^ dir) * 4 + add3;
-                input1 = shuffle2(input1, input2, comp);
-                input2 = shuffle2(input2, temp, comp);
-                SORT_VECTOR(input1, dir);
-                SORT_VECTOR(input2, dir);
-
-                l_data[id]     = input1;
-                l_data[id + 1] = input2;
         }
-
-        dir = (get_group_id(0) % 2) * -1;
-        /* perform bitonic merge */
-        for (stride = get_local_size(0); stride > 1; stride /= 2) {
-                barrier(CLK_LOCAL_MEM_FENCE);
-                id = get_local_id(0) + (get_local_id(0) / stride) * stride;
-                SWAP_VECTORS(l_data[id], l_data[id + stride], dir)
-        }
-        barrier(CLK_LOCAL_MEM_FENCE);
-
-        id = get_local_id(0) * 2;
-        input1 = l_data[id];
-        input2 = l_data[id + 1];
-        temp = input1;
-
-        comp = (abs(input1 > input2) ^ dir) * 4 + add3;
-        input1 = shuffle2(input1, input2, comp);
-        input2 = shuffle2(input2, temp, comp);
-        SORT_VECTOR(input1, dir);
-        SORT_VECTOR(input2, dir);
-        
-        g_data[global_start]     = input1;
-        g_data[global_start + 1] = input2;
-}
-
-__kernel void bitonic_sort_stage_n (__global int4 *g_data, __local int4 *l_data, uint k, uint n) 
-{
-        int4 input1, input2, temp;
-        uint4 comp, add;
-        uint id, global_offset;
-        int dir;
-
-        add = (uint4) (0, 1, 2, 3);
-
-        id = get_group_id(0) + (get_group_id(0) / n) * n * get_local_size(0) + 
-             get_local_id(0);
-
-        global_offset = n * get_local_size(0);
-
-        input1 = g_data[id];
-        input2 = g_data[id + global_offset];
-
-        dir = get_local_id(0) / k & 1;
-
-        temp = input1;
-        comp = (abs(input1 < input2) ^ dir) * 4 + add;
-        g_data[id]                 = shuffle2(input1, input2, comp);
-        g_data[id + global_offset] = shuffle2(input2, temp, comp);
-}
-
-__kernel void bitonic_sort_stage_0 (__global int4 *g_data, __local int4 *l_data, uint k)
-{
-        int dir = (get_group_id(0) / k & 1) * -1;
-        
-        last_merge_sort(g_data, l_data, dir);
-}
-
-__kernel void bitonic_sort_merge (__global int4 *g_data, uint n)
-{
-        int4 input1, input2;
-        uint4 comp, add;
-        uint id, global_offset;
-        int dir = 1;
-
-        add = (uint4) (0, 1, 2, 3);
-
-        id = get_group_id(0) + (get_group_id(0) / n) * n * get_local_size(0) + 
-             get_local_id(0);
-
-        global_offset = n * get_local_size(0);
-
-        input1 = g_data[id];
-        input2 = g_data[id + global_offset];
-
-        comp = (abs(input1 > input2) ^ dir) * 4 + add;
-        g_data[id]                 = shuffle2(input1, input2, comp);
-        g_data[id + global_offset] = shuffle2(input2, input1, comp);
-}
-
-__kernel void bitonic_sort_merge_last (__global int4 *g_data, __local int4 *l_data)
-{
-        int dir = 0;
-        last_merge_sort(g_data, l_data, dir);
 }

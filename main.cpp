@@ -39,7 +39,11 @@ int main () try
 {
         std::chrono::high_resolution_clock::time_point t_start, t_fin;
         
-        config_t config {16, 16*8, 4, "../include/opencl/bitonic_sort.cl"};
+        // config_t config {16'384, 32'768, 1, "../include/opencl/bitonic_sort.cl"};
+        // config_t config {32'768, 32'768, 1, "../include/opencl/bitonic_sort.cl"};
+        // config_t config {64'536, 32'768, 1, "../include/opencl/bitonic_sort.cl"};
+        // config_t config {262'144, 32'768, 1, "../include/opencl/bitonic_sort.cl"};
+        config_t config {1'048'576, 1'048'576, 1, "../include/opencl/bitonic_sort.cl"};
         bitonic_sort_t<int> app(config);
 
         cl::vector<int> data(config.data_sz);
@@ -58,7 +62,7 @@ int main () try
         std::cout << "GPU pure time measured: " << GPU_duration / 1000000 << " ms" << std::endl;
 
         t_start = std::chrono::high_resolution_clock::now();
-        // std::sort(data.begin(), data.end());
+        std::sort(data.begin(), data.end());
         t_fin = std::chrono::high_resolution_clock::now();
         duration =
         std::chrono::duration_cast<std::chrono::milliseconds>(t_fin - t_start).count();
@@ -67,9 +71,11 @@ int main () try
         if (data == sorted_data)
                 std::cout << "Passed.\n";
         else {
-                for (size_t i = 0; i < data.size(); i++)
-                        // if (data[i] != sorted_data[i])
+                for (size_t i = 0, cnt = 0; i < data.size() && cnt < 16; i++)
+                        if (data[i] != sorted_data[i]) {
                                 std::cout << i << " " << data[i] << " " << sorted_data[i] << "\n"; 
+                                cnt++;
+                        }
                 std::cout << "Not passed.\n";
         }
 
