@@ -51,6 +51,8 @@ int main () try
 
         rand_init(data.begin(), data.end(), 0, 0xF);
 
+        cl::vector<int> data2(data);
+
         t_start = std::chrono::high_resolution_clock::now();
         cl_long GPU_duration = app.sort(data.data(), sorted_data.data(), data.size());
         t_fin = std::chrono::high_resolution_clock::now();
@@ -67,6 +69,15 @@ int main () try
         duration =
         std::chrono::duration_cast<std::chrono::milliseconds>(t_fin - t_start).count();
         std::cout << "std::sort time measured: " << duration << " ms" << std::endl;
+
+        t_start = std::chrono::high_resolution_clock::now();
+        sort(data2.data(), data2.size());
+        t_fin = std::chrono::high_resolution_clock::now();
+        duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(t_fin - t_start).count();
+        std::cout << "cpu bitonic sort time measured: " << duration << " ms" << std::endl;
+        if (data2 != sorted_data)
+                std::cout << "cpu bitonic sort don't work.\n";
         
         if (data == sorted_data)
                 std::cout << "Passed.\n";

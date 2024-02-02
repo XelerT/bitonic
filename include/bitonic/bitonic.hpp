@@ -34,14 +34,14 @@ namespace bitonic
 
         template <typename T>
         void sort (T *data, size_t n_data) {
-                for (int k = 2; k <= n_data; k *= 2) {
-                        for (int j = k / 2; j > 0; j = j / 2) {
-                                for (int i = 0; i < n_data; ++i) {
-                                        int ixj = i ^ j;
+                for (size_t k = 2; k <= n_data; k *= 2) {
+                        for (size_t j = k / 2; j > 0; j = j / 2) {
+                                for (size_t i = 0; i < n_data; ++i) {
+                                        size_t ixj = i ^ j;
                                         if (ixj > i) {
-                                                if ((i & k) == 0 && data[i] > data[ixj] || 
-                                                    (i & k) != 0 && data[i] < data[ixj]) 
-                                                        swap(data[i], data[ixj]);
+                                                if (((i & k) == 0 && data[i] > data[ixj]) || 
+                                                    ((i & k) != 0 && data[i] < data[ixj])) 
+                                                        std::swap(data[i], data[ixj]);
                                         }
                                 }
                         }

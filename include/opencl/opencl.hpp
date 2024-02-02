@@ -117,33 +117,39 @@ namespace opencl
                 cl::Program program {context, kernel, true /* build immediately */};
 
                 // sort_init_kernel       sort_init       {program, "bitonic_sort_init"};
-                sort_stage_n_kernel    sort_stage_n    {program, "bitonic_sort_stage_n"};
+                // sort_stage_n_kernel    sort_stage_n    {program, "bitonic_sort_stage_n"};
                 // sort_stage_0_kernel    sort_stage_0    {program, "bitonic_sort_stage_0"};
                 // sort_merge_kernel      sort_merge      {program, "bitonic_sort_merge"};
                 // sort_merge_last_kernel sort_merge_last {program, "bitonic_sort_merge_last"};
                 
-                auto ctx_devices = context.getInfo<CL_CONTEXT_DEVICES>();
-                config.local_sz = sort_stage_n.getKernel().getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(ctx_devices[0]);
+                // auto ctx_devices = context.getInfo<CL_CONTEXT_DEVICES>();
+                // config.local_sz = sort_stage_n.getKernel().getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(ctx_devices[0]);
 
-                config.local_sz = (int) pow(2, trunc(log2(static_cast<double>(config.local_sz))));
+                // config.local_sz = (int) pow(2, trunc(log2(static_cast<double>(config.local_sz))));
                 if (config.local_sz >= config.global_sz)
                         config.global_sz = config.local_sz;
                 std::cout << "conf lc_sz=" << config.local_sz << std::endl;
                 std::cout << "conf gl_sz=" << config.global_sz << std::endl;
                 
-                cl::NDRange gl_range {n_elems};
-                cl::NDRange lc_range {1};
-                cl::EnqueueArgs args {queue, gl_range, lc_range};
+                // cl::NDRange gl_range {n_elems};
+                // cl::NDRange lc_range {1};
+                // cl::EnqueueArgs args {queue, gl_range, lc_range};
+
+                cl::Kernel sort_stage_n(program, "bitonic_sort_stage_n");
+                sort_stage_n.setArg(0, cl_data);
 
                 cl_ulong GPU_duration = 0;
+                cl::Event event {};
 
                 for (int k = 2; k <= n_elems; k *= 2) {
+                        sort_stage_n.setArg(1, k);
                         for (int j = k / 2; j > 0; j = j / 2) {
-                                cl::Event event = sort_stage_n(args, cl_data, k, j);
+                                sort_stage_n.setArg(2, j);
+                                queue.enqueueNDRangeKernel(sort_stage_n, 0, n_elems, 1, nullptr, &event);
                                 event.wait();
                                 cl_ulong GPU_t_start  = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
                                 cl_ulong GPU_t_fin    = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-                                GPU_duration = GPU_t_fin - GPU_t_start;
+                                GPU_duration += GPU_t_fin - GPU_t_start;
                         }
                 }
 
