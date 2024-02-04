@@ -1,6 +1,17 @@
 #pragma once
 
 #include <cassert>
+
+#ifndef CL_HPP_TARGET_OPENCL_VERSION
+#define CL_HPP_MINIMUM_OPENCL_VERSION 120
+#define CL_HPP_TARGET_OPENCL_VERSION 120
+#endif
+
+#define CL_HPP_CL_1_2_DEFAULT_BUILD
+#define CL_HPP_ENABLE_EXCEPTIONS
+
+#include "utils/utils.hpp"
+#include "ui/cmd_parser.hpp"
 #include "CL/opencl.hpp"
 
 namespace opencl 
@@ -8,26 +19,27 @@ namespace opencl
         struct config_t
         {
                 size_t data_sz   = 1;
-                size_t global_sz = 1;
+                size_t glob_sz   = 1;
                 size_t local_sz  = 1;
+                size_t offset    = 0;
 
-                int n_stages  = static_cast<int>(global_sz / local_sz);
+                int n_stages = static_cast<int>(glob_sz / local_sz);
                 
-                const char *kernel_file_name = "bitonic_sort.cl";
+                std::string kernel_path = "bitonic_sort.cl";
                 cl::QueueProperties q_props = cl::QueueProperties::Profiling | 
                                               cl::QueueProperties::OutOfOrder;
 
                 config_t () = default;
-                config_t (size_t data_sz_,  size_t global_sz_,
-                          size_t local_sz_, int    n_stages_, const char *kernel_file_name_):
-                          data_sz(data_sz_), global_sz(global_sz_), 
+                config_t (size_t data_sz_,  size_t glob_sz_,
+                          size_t local_sz_, int    n_stages_, const char *kernel_path_):
+                          data_sz(data_sz_), glob_sz(glob_sz_), 
                           local_sz(local_sz_), n_stages(n_stages_),
-                          kernel_file_name(kernel_file_name_) {}
-                config_t (size_t data_sz_,  size_t global_sz_,
-                          size_t local_sz_, const char *kernel_file_name_):
-                          data_sz(data_sz_), global_sz(global_sz_), 
+                          kernel_path(kernel_path_) {}
+                config_t (size_t data_sz_,  size_t glob_sz_,
+                          size_t local_sz_, const char *kernel_path_):
+                          data_sz(data_sz_), glob_sz(glob_sz_), 
                           local_sz(local_sz_),
-                          kernel_file_name(kernel_file_name_) {}
+                          kernel_path(kernel_path_) {}
         };
 
         class opencl_app_t
@@ -45,7 +57,7 @@ namespace opencl
                 public:
                         opencl_app_t (config_t &config_):
                                 platform(select_platform()),     context(get_gpu_context(platform())), 
-                                queue(context, config_.q_props), kernel(read_file(config_.kernel_file_name)), 
+                                queue(context, config_.q_props), kernel(read_file(config_.kernel_path)), 
                                 config(config_) { }
                                 // cl::string name    = P_.getInfo<CL_PLATFORM_NAME>();
                                 // cl::string profile = P_.getInfo<CL_PLATFORM_PROFILE>();       
@@ -77,6 +89,15 @@ namespace opencl
                         cl_long sort (T *data, T *sorted_data, size_t n_elems);
         };
 
+//===================================================~~~FUNCTIONS~~~====================================================================
+
+        config_t create_bitonic_config (arguments_t &parsed_args, size_t n_data_elems);
+
+
+//===================================================~~~DECLARATIONS~~~====================================================================
+
+//---------------------------------------------------~~~~~~Protected~~~~~~--------------------------------------------------------------------
+
         cl::Platform opencl_app_t::select_platform ()
         {
                 cl::vector<cl::Platform> platforms;
@@ -103,6 +124,8 @@ namespace opencl
                 return cl::Context(CL_DEVICE_TYPE_GPU, properties);
         }
 
+//---------------------------------------------------~~~~~~Public~~~~~~--------------------------------------------------------------------
+
         template <typename T>
         cl_long bitonic_sort_t<T>::sort (T *data, T *sorted_data, size_t n_elems) 
         {
@@ -116,44 +139,35 @@ namespace opencl
 
                 cl::Program program {context, kernel, true /* build immediately */};
 
-                // sort_init_kernel       sort_init       {program, "bitonic_sort_init"};
-                // sort_stage_n_kernel    sort_stage_n    {program, "bitonic_sort_stage_n"};
-                // sort_stage_0_kernel    sort_stage_0    {program, "bitonic_sort_stage_0"};
-                // sort_merge_kernel      sort_merge      {program, "bitonic_sort_merge"};
-                // sort_merge_last_kernel sort_merge_last {program, "bitonic_sort_merge_last"};
+                if (config.local_sz >= config.glob_sz)
+                        config.glob_sz = config.local_sz;
                 
-                // auto ctx_devices = context.getInfo<CL_CONTEXT_DEVICES>();
-                // config.local_sz = sort_stage_n.getKernel().getWorkGroupInfo<CL_KERNEL_WORK_GROUP_SIZE>(ctx_devices[0]);
-
-                // config.local_sz = (int) pow(2, trunc(log2(static_cast<double>(config.local_sz))));
-                if (config.local_sz >= config.global_sz)
-                        config.global_sz = config.local_sz;
-                std::cout << "conf lc_sz=" << config.local_sz << std::endl;
-                std::cout << "conf gl_sz=" << config.global_sz << std::endl;
-                
-                // cl::NDRange gl_range {n_elems};
-                // cl::NDRange lc_range {1};
-                // cl::EnqueueArgs args {queue, gl_range, lc_range};
-
-                cl::Kernel sort_stage_n(program, "bitonic_sort_stage_n");
+                cl::Kernel sort_stage_n {program, "bitonic_sort_stage_n"};
                 sort_stage_n.setArg(0, cl_data);
 
-                cl_ulong GPU_duration = 0;
-                cl::Event event {};
+                cl::Event empty_event {};
+                std::vector<cl::Event> empty_events {};
+                queue.enqueueMarkerWithWaitList(&empty_events, &empty_event);
+                empty_event.wait();
+                cl_ulong GPU_t_start = empty_event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
 
+                cl::Event event {};
                 for (int k = 2; k <= n_elems; k *= 2) {
                         sort_stage_n.setArg(1, k);
                         for (int j = k / 2; j > 0; j = j / 2) {
                                 sort_stage_n.setArg(2, j);
-                                queue.enqueueNDRangeKernel(sort_stage_n, 0, n_elems, 1, nullptr, &event);
-                                event.wait();
-                                cl_ulong GPU_t_start  = event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
-                                cl_ulong GPU_t_fin    = event.getProfilingInfo<CL_PROFILING_COMMAND_END>();
-                                GPU_duration += GPU_t_fin - GPU_t_start;
+                                queue.enqueueNDRangeKernel(sort_stage_n,   config.offset, 
+                                                           config.glob_sz, config.local_sz, 
+                                                           nullptr, &event);
                         }
                 }
+                event.wait();
+
+                queue.enqueueMarkerWithWaitList(&empty_events, &empty_event);
+                empty_event.wait();
+                cl_ulong GPU_t_fin = empty_event.getProfilingInfo<CL_PROFILING_COMMAND_START>();
 
                 cl::copy(queue, cl_data, sorted_data, sorted_data + n_elems);
-                return GPU_duration; // to collect profiling info
+                return GPU_t_fin - GPU_t_start;
         }
 }

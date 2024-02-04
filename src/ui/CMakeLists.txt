@@ -1,5 +1,6 @@
 set(SRCS
         ui.cpp
+        cmd_parser.cpp
 )
 
 add_library(ui ${SRCS})

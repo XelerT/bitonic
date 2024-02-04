@@ -6,7 +6,7 @@ import os
 from subprocess import Popen, PIPE, STDOUT
 from pathlib import Path
 
-from matrix_gen import gen_sq_matrix
+from my_utils import gen_random_list
 
 class TERMINAL_COLORS:
         PURPLE    = '\033[95m'
@@ -81,16 +81,22 @@ def parse_data_file (file_name):
 
 
 def gen_data(file_name):
-        n_dimensions = parse_data_file(file_name)
+        n_elems = parse_data_file(file_name)
 
-        matrix, determinant = gen_sq_matrix(n_dimensions)
-        data = [n_dimensions]
+        random_data = gen_random_list(n_elems)
+        sorted_rand_data = random_data
+        sorted_rand_data.sort()
 
-        for x in matrix:
-                for y in x:
-                        data.append(str(y))                
+        data = [n_elems]
+        sorted_data = []
 
-        return data, str(determinant)
+        for x in random_data:
+                data.append(str(x))
+
+        for x in sorted_rand_data:
+                sorted_data.append(str(x) + ' ')       
+
+        return data, sorted_data
         
 
 def run_e2e_test(app2run, input_data):
@@ -113,7 +119,7 @@ def run_e2e_test(app2run, input_data):
 
 def check_app_output(n_test, data, correct_output, output_data, exec_time):
         correct_str = ''.join(str(elem) for elem in correct_output)
-        check_output_data(n_test, output_data[:-2], correct_str, exec_time)
+        check_output_data(n_test, output_data, correct_str, exec_time)
 
         return correct_output
 
@@ -138,7 +144,7 @@ def run_e2e_tests(app_name, app2_name=str()):
 
 if __name__ == "__main__":
         get_data_files_names()
-        run_e2e_tests("./matrix")
+        run_e2e_tests("./bitonic_sort")
 
 
 log_file.close()
