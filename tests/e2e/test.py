@@ -84,7 +84,7 @@ def gen_data(file_name):
         n_elems = parse_data_file(file_name)
 
         random_data = gen_random_list(n_elems)
-        sorted_rand_data = random_data
+        sorted_rand_data = random_data.copy()
         sorted_rand_data.sort()
 
         data = [n_elems]
