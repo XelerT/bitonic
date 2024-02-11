@@ -2,10 +2,6 @@ cmake_minimum_required(VERSION 3.14)
 
 project(bitonic_sort)
 
-#build flags
-include(cmake/build_flags.cmake)
-include(cmake/link_flags.cmake)
-
 # version
 set(CMAKE_CXX_STANDARD 20)
 # if (NOT CMAKE_CXX_STANDARD OR NOT CMAKE_CXX_COMPILER)
@@ -50,10 +46,15 @@ endforeach()
 
 add_executable(${PROJECT_NAME} main.cpp)
 
+#build flags
+include(cmake/build_flags.cmake)
+include(cmake/link_flags.cmake)
+
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(${PROJECT_NAME} ${SRC_LIST})
         
 install(TARGETS ${PROJECT_NAME})
+
 
 # tests
 
@@ -64,13 +65,3 @@ endif()
 # 
 
 install()
-
-#custom targets
-
-# add_custom_target(dot ALL
-#         COMMAND ${CMAKE_COMMAND} "--graphviz=tree.dot" .
-#         COMMAND dot -T png tree.dot -o tree.png
-#         WORKING_DIRECTORY "${CMAKE_BINARY_DIR}"
-# )
-
-#

@@ -12,6 +12,5 @@ set(DEBUG_BUILD     -Wshadow -Winit-self -Wredundant-decls -Wcast-align -Wundef
                     )   
 set(DEBUG_LINK -lasan -fsanitize=address,leak)
 
-add_compile_options("$<$<CONFIG:DEBUG>:${DEBUG_BUILD}>")
-
-add_link_options("$<$<CONFIG:DEBUG>:${DEBUG_LINK}>")    
+target_compile_options(${PROJECT_NAME} PUBLIC "$<$<CONFIG:DEBUG>:${DEBUG_BUILD}>")
+target_link_options(${PROJECT_NAME} PUBLIC "$<$<CONFIG:DEBUG>:${DEBUG_LINK}>")

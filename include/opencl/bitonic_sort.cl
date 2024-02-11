@@ -26,17 +26,29 @@
                 data elements.
 */
 
+#define SORT_VECTOR(input, dir)                                 \
+        comp = abs(input > shuffle(input, mask2)) ^ dir;        \
+        input = shuffle(input, comp * 2 + add2);                \
+        comp = abs(input > shuffle(input, mask1)) ^ dir;        \
+        input = shuffle(input, comp + add1);
+
+#define SWAP_VECTORS(in1, in2, dir)                             \
+        input1 = in1;                                           \
+        input2 = in2;                                           \
+        comp = (abs(input1 > input2) ^ dir) * 4 + add3;         \
+        in1 = shuffle2(input1, input2, comp);                   \
+        in2 = shuffle2(input2, input1, comp);    
+
 void swap (__global int *rhs, __global int *lhs)
 {
         int temp = *rhs;
         atomic_xchg(rhs, *lhs);
         atomic_xchg(lhs, temp);
 }
-
 __kernel void bitonic_sort_stage_n (__global int *g_data, uint k, uint j) 
 {
         int4 input1, input2, temp;
-        uint4 comp, add;
+        uint4 comp, add3;
         uint id, global_offset;
         int idxj, dir, data1, data2;
 
