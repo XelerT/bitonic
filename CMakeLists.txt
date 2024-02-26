@@ -4,8 +4,6 @@ project(bitonic_sort)
 
 # version
 set(CMAKE_CXX_STANDARD 20)
-# if (NOT CMAKE_CXX_STANDARD OR NOT CMAKE_CXX_COMPILER)
-# endif()
 
 message("CMAKE_CXX_STANDARD=${CMAKE_CXX_STANDARD}")
 message("CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
@@ -20,7 +18,7 @@ endif()
 # Required libs
 
 find_package( Boost 1.40 COMPONENTS program_options REQUIRED )
-
+INCLUDE_DIRECTORIES(${Boost_INCLUDE_DIRS})
 
 # collect srcs 
 
@@ -50,8 +48,11 @@ add_executable(${PROJECT_NAME} main.cpp)
 include(cmake/build_flags.cmake)
 include(cmake/link_flags.cmake)
 
+target_link_options(${PROJECT_NAME} PUBLIC "${LINK}")
+
 target_include_directories(${PROJECT_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_link_libraries(${PROJECT_NAME} ${SRC_LIST})
+target_link_libraries(${PROJECT_NAME} ${Boost_LIBRARIES})
         
 install(TARGETS ${PROJECT_NAME})
 
